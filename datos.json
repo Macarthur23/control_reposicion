@@ -1,0 +1,20 @@
+import pandas as pd
+import json
+
+# 1. Cargar el archivo (asegúrate de que el nombre sea el correcto)
+nombre_archivo = 'data puerta y piso.xlsx'
+df = pd.read_excel(nombre_archivo)
+
+# 2. Seleccionar y renombrar las columnas para que el HTML las entienda
+# Usamos: LPN, SKU, DESCRIPCION y OBS - QV
+df_limpio = df[['LPN', 'SKU', 'DESCRIPCION', 'OBS - QV']].copy()
+df_limpio.columns = ['lpn', 'sku', 'descripcion', 'accion']
+
+# 3. Convertir a formato JSON
+resultado_json = df_limpio.to_dict(orient='records')
+
+# 4. Guardar el archivo datos.json
+with open('datos.json', 'w', encoding='utf-8') as f:
+    json.dump(resultado_json, f, ensure_ascii=False, indent=4)
+
+print("¡Archivo datos.json generado con éxito!")
