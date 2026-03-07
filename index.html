@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PROMART - Monitor LPN</title>
+    <style>
+        body { font-family: 'Arial', sans-serif; text-align: center; padding: 20px; background-color: #f4f4f9; }
+        #scanner { width: 90%; padding: 20px; font-size: 22px; border-radius: 10px; border: 2px solid #0056b3; outline: none; }
+        
+        #card { display: none; margin-top: 20px; padding: 30px; border-radius: 20px; color: white; shadow: 0 4px 8px rgba(0,0,0,0.2); }
+        
+        /* Colores por Acción */
+        .quiebre { background-color: #d32f2f; } /* Rojo */
+        .subir { background-color: #388e3c; }   /* Verde */
+        .potencia { background-color: #1976d2; } /* Azul */
+        
+        h1 { color: #333; }
+        .info-principal { font-size: 40px; font-weight: bold; margin: 10px 0; }
+        .info-secundaria { font-size: 20px; opacity: 0.9; }
+    </style>
+</head>
+<body>
+    <h1>Lector de LPN</h1>
+    <input type="text" id="scanner" placeholder="Pistolee aquí..." autofocus>
+
+    <div id="card">
+        <div id="accion" class="info-principal"></div>
+        <div id="desc" class="info-secundaria"></div>
+        <div id="sku" style="font-weight: bold; margin-top: 10px;"></div>
+    </div>
+
+    <script>
+        const input = document.getElementById('scanner');
+        const card = document.getElementById('card');
+        let inventario = [];
+
+        // Cargar el JSON desde GitHub
+        fetch('datos.json')
+            .then(res => res.json())
+            .then(data => { inventario = data; });
+
+        input.addEventListener('change', (e) => {
+            const lpnValue = e.target.value.trim();
+            const p = inventario.find(i => String(i.lpn) === lpnValue);
+
+            if (p) {
+                card.style.display = 'block';
+                document.getElementById('accion').innerText = p.accion;
+                document.getElementById('desc').innerText = p.descripcion;
+                document.getElementById('sku').innerText = "SKU: " + p.sku;
+                
+                // Aplicar color según OBS - QV
+                card.className = p.accion.toLowerCase(); 
+            } else {
+                alert("LPN no encontrado");
+                card.style.display = 'none';
+            }
+            e.target.value = ''; // Limpiar para el siguiente
+            input.focus();
+        });
+    </script>
+</body>
+</html>
