@@ -3,66 +3,76 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PROMART - Lector Dinámico</title>
+    <title>PROMART - Monitor LPN Pro</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
-        body { font-family: sans-serif; text-align: center; background-color: #1a1a1a; color: white; margin: 0; padding: 10px; }
-        .header { background-color: #ff5000; padding: 15px; font-weight: bold; font-size: 20px; border-radius: 0 0 15px 15px; margin-bottom: 20px; }
+        body { font-family: 'Segoe UI', sans-serif; text-align: center; background-color: #1a1a1a; color: white; margin: 0; padding: 10px; }
+        .header { background-color: #ff5000; padding: 15px; font-weight: bold; font-size: 20px; border-radius: 0 0 15px 15px; margin-bottom: 10px; }
         
-        /* Paso 1: Carga de archivo */
-        #seccion-carga { background: #333; padding: 20px; border-radius: 15px; border: 2px dashed #ff5000; margin-bottom: 20px; }
-        input[type="file"] { margin: 15px 0; color: white; }
+        /* Carga de archivo */
+        #seccion-carga { background: #333; padding: 25px; border-radius: 15px; border: 2px dashed #ff5000; margin: 10px; }
         
-        /* Paso 2: Cámara (Oculta al inicio) */
-        #seccion-camara { display: none; }
-        #reader { width: 100%; border-radius: 15px; overflow: hidden; background: #000; }
+        /* Sección de trabajo */
+        #seccion-trabajo { display: none; }
+        #reader { width: 100%; border-radius: 15px; overflow: hidden; background: #000; margin-bottom: 15px; }
         
-        /* Resultados */
-        .producto { padding: 15px; margin: 10px 0; border-radius: 12px; text-align: left; }
+        /* Entrada Manual */
+        .input-manual-container { background: #222; padding: 15px; border-radius: 12px; margin-bottom: 15px; border: 1px solid #444; }
+        #inputManual { width: 70%; padding: 12px; border-radius: 5px; border: none; font-size: 16px; }
+        #btnManual { padding: 12px; background: #ff5000; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
+
+        /* Tarjetas de productos */
+        .producto { padding: 18px; margin: 10px 0; border-radius: 12px; text-align: left; animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
         .quiebre { background-color: #d32f2f; border-left: 10px solid #ffeb3b; }
         .subir { background-color: #2e7d32; border-left: 10px solid #a5d6a7; }
         .potencia { background-color: #1565c0; border-left: 10px solid #90caf9; }
         
-        .status { font-size: 24px; font-weight: bold; display: block; }
-        .desc { font-size: 16px; margin: 5px 0; }
-        .sku { font-size: 13px; background: rgba(0,0,0,0.3); padding: 3px; border-radius: 4px; }
-        #info-lpn { color: #ff5000; font-weight: bold; margin: 15px 0; font-size: 18px; }
+        .status { font-size: 26px; font-weight: bold; display: block; margin-bottom: 5px; }
+        .desc { font-size: 16px; margin-bottom: 8px; font-weight: 500; }
+        .sku { font-size: 13px; background: rgba(0,0,0,0.4); padding: 4px 8px; border-radius: 4px; display: inline-block; }
+        #info-lpn { color: #ff5000; font-weight: bold; margin-bottom: 10px; font-size: 18px; }
     </style>
 </head>
 <body>
 
-    <div class="header">PROMART - CARGA DE CRUCE</div>
+    <div class="header">PROMART - SISTEMA LPN</div>
 
     <div id="seccion-carga">
-        <h3>1. Selecciona el Excel del Cruce</h3>
+        <h3 style="margin-top:0">1. Subir Cruce de Excel</h3>
         <input type="file" id="fileInput" accept=".xlsx, .xls, .csv">
-        <p style="font-size: 12px; color: #ccc;">El archivo debe tener las columnas: LPN, SKU, DESCRIPCION y OBS - QV</p>
+        <p style="font-size: 12px; color: #aaa;">Columnas: LPN, SKU, DESCRIPCION, OBS - QV</p>
     </div>
 
-    <div id="seccion-camara">
-        <div id="info-lpn">LPN ACTUAL: NINGUNO</div>
+    <div id="seccion-trabajo">
+        
+        <div class="input-manual-container">
+            <input type="text" id="inputManual" placeholder="Escribir LPN manual...">
+            <button id="btnManual">BUSCAR</button>
+        </div>
+
         <div id="reader"></div>
+        <div id="info-lpn">ESPERANDO LECTURA...</div>
         <div id="lista-productos"></div>
     </div>
 
+    <audio id="beepSound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" preload="auto"></audio>
+
     <script>
         let datosCruce = [];
+        const beep = document.getElementById('beepSound');
 
-        // Lógica para procesar el Excel
+        // Procesar Excel
         document.getElementById('fileInput').addEventListener('change', function(e) {
             const file = e.target.files[0];
             const reader = new FileReader();
-
             reader.onload = function(e) {
                 const data = new Uint8Array(e.target.result);
                 const workbook = XLSX.read(data, {type: 'array'});
-                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
                 
-                // Convertir a JSON
-                const rows = XLSX.utils.sheet_to_json(firstSheet);
-                
-                // Limpiar y validar datos
                 datosCruce = rows.map(r => ({
                     lpn: String(r['LPN'] || '').trim().toUpperCase(),
                     sku: String(r['SKU'] || ''),
@@ -71,42 +81,21 @@
                 }));
 
                 if (datosCruce.length > 0) {
-                    alert("¡Éxito! Se cargaron " + datosCruce.length + " registros.");
-                    iniciarEscaner();
-                } else {
-                    alert("Error: No se encontraron datos en el archivo.");
+                    document.getElementById('seccion-carga').style.display = 'none';
+                    document.getElementById('seccion-trabajo').style.display = 'block';
+                    iniciarCamara();
                 }
             };
             reader.readAsArrayBuffer(file);
         });
 
-        function iniciarEscaner() {
-            // Mostrar cámara y ocultar carga
-            document.getElementById('seccion-carga').style.display = 'none';
-            document.getElementById('seccion-camara').style.display = 'block';
-            document.querySelector('.header').innerText = "MONITOR DE ESCANEO";
+        // Función para procesar y mostrar la info
+        function procesarLPN(val) {
+            val = val.trim().toUpperCase();
+            if(!val) return;
 
-            const html5QrCode = new Html5Qrcode("reader");
-            const config = { 
-                fps: 15, 
-                qrbox: { width: 280, height: 160 },
-                aspectRatio: 1.0 
-            };
-
-            html5QrCode.start(
-                { facingMode: "environment" }, 
-                config, 
-                (decodedText) => {
-                    const audio = new Audio('https://www.soundjay.com/buttons/beep-07.mp3');
-                    audio.play();
-                    mostrarResultado(decodedText);
-                }
-            );
-        }
-
-        function mostrarResultado(lpnEscaneado) {
-            const val = lpnEscaneado.trim().toUpperCase();
-            document.getElementById('info-lpn').innerText = "LPN ESCANEADO: " + val;
+            beep.play(); // Sonido
+            document.getElementById('info-lpn').innerText = "LPN: " + val;
             
             const encontrados = datosCruce.filter(i => i.lpn === val);
             const contenedor = document.getElementById('lista-productos');
@@ -115,9 +104,9 @@
             if (encontrados.length > 0) {
                 encontrados.forEach(p => {
                     const div = document.createElement('div');
-                    // Asignar clase de color (quiebre, subir, potencia)
-                    const claseCss = p.obs.toLowerCase().includes('quiebre') ? 'quiebre' : 
-                                    p.obs.toLowerCase().includes('subir') ? 'subir' : 'potencia';
+                    const obsLower = p.obs.toLowerCase();
+                    const claseCss = obsLower.includes('quiebre') ? 'quiebre' : 
+                                    obsLower.includes('subir') ? 'subir' : 'potencia';
                     
                     div.className = `producto ${claseCss}`;
                     div.innerHTML = `
@@ -125,14 +114,39 @@
                         <div class="desc">${p.desc}</div>
                         <div class="sku">SKU: ${p.sku}</div>
                     `;
-                    contenedor.appendChild(div);
+                    contenedor.prepend(div); // Muestra el más reciente arriba
                 });
             } else {
-                contenedor.innerHTML = '<h2 style="color:yellow">⚠️ LPN NO ENCONTRADO</h2>';
+                contenedor.innerHTML = '<h2 style="color:#ffeb3b">⚠️ NO ENCONTRADO</h2>';
             }
+        }
+
+        // Búsqueda Manual
+        document.getElementById('btnManual').addEventListener('click', () => {
+            const txt = document.getElementById('inputManual').value;
+            procesarLPN(txt);
+            document.getElementById('inputManual').value = '';
+        });
+
+        // Soporte para "Enter" en teclado manual
+        document.getElementById('inputManual').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                procesarLPN(e.target.value);
+                e.target.value = '';
+            }
+        });
+
+        function iniciarCamara() {
+            const html5QrCode = new Html5Qrcode("reader");
+            html5QrCode.start(
+                { facingMode: "environment" }, 
+                { fps: 20, qrbox: { width: 280, height: 160 } },
+                (text) => { procesarLPN(text); }
+            ).catch(err => alert("Error cámara: " + err));
         }
     </script>
 </body>
 </html>
+
 
 
