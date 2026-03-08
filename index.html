@@ -3,150 +3,148 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PROMART - Monitor LPN Pro</title>
+    <title>PROMART - LPN Cloud</title>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore-compat.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; text-align: center; background-color: #1a1a1a; color: white; margin: 0; padding: 10px; }
-        .header { background-color: #ff5000; padding: 15px; font-weight: bold; font-size: 20px; border-radius: 0 0 15px 15px; margin-bottom: 10px; }
+        body { font-family: 'Segoe UI', sans-serif; text-align: center; background: #121212; color: white; margin: 0; padding: 10px; }
+        .header { background: #ff5000; padding: 15px; font-weight: bold; border-radius: 0 0 15px 15px; margin-bottom: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+        .status-dot { height: 10px; width: 10px; background-color: #4CAF50; border-radius: 50%; display: inline-block; margin-right: 5px; }
         
-        /* Carga de archivo */
-        #seccion-carga { background: #333; padding: 25px; border-radius: 15px; border: 2px dashed #ff5000; margin: 10px; }
+        /* Contenedores */
+        #seccion-admin, #seccion-operario { display: none; margin-top: 10px; }
+        .card { background: #222; padding: 20px; border-radius: 15px; border: 1px solid #444; margin: 10px; }
         
-        /* Sección de trabajo */
-        #seccion-trabajo { display: none; }
-        #reader { width: 100%; border-radius: 15px; overflow: hidden; background: #000; margin-bottom: 15px; }
+        /* Cámara y Resultados */
+        #reader { width: 100%; border-radius: 15px; overflow: hidden; background: #000; }
+        .producto { padding: 15px; margin: 10px 0; border-radius: 10px; text-align: left; }
+        .quiebre { background: #d32f2f; border-left: 10px solid #ffeb3b; }
+        .subir { background: #2e7d32; border-left: 10px solid #a5d6a7; }
+        .potencia { background: #1565c0; border-left: 10px solid #90caf9; }
         
-        /* Entrada Manual */
-        .input-manual-container { background: #222; padding: 15px; border-radius: 12px; margin-bottom: 15px; border: 1px solid #444; }
-        #inputManual { width: 70%; padding: 12px; border-radius: 5px; border: none; font-size: 16px; }
-        #btnManual { padding: 12px; background: #ff5000; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
-
-        /* Tarjetas de productos */
-        .producto { padding: 18px; margin: 10px 0; border-radius: 12px; text-align: left; animation: slideIn 0.3s ease-out; }
-        @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .status-txt { font-size: 24px; font-weight: bold; display: block; }
+        .sku-txt { font-size: 13px; background: rgba(0,0,0,0.4); padding: 3px; border-radius: 4px; }
         
-        .quiebre { background-color: #d32f2f; border-left: 10px solid #ffeb3b; }
-        .subir { background-color: #2e7d32; border-left: 10px solid #a5d6a7; }
-        .potencia { background-color: #1565c0; border-left: 10px solid #90caf9; }
-        
-        .status { font-size: 26px; font-weight: bold; display: block; margin-bottom: 5px; }
-        .desc { font-size: 16px; margin-bottom: 8px; font-weight: 500; }
-        .sku { font-size: 13px; background: rgba(0,0,0,0.4); padding: 4px 8px; border-radius: 4px; display: inline-block; }
-        #info-lpn { color: #ff5000; font-weight: bold; margin-bottom: 10px; font-size: 18px; }
+        /* Botones y Inputs */
+        .btn-upload { background: #ff5000; color: white; padding: 10px 20px; border-radius: 5px; border: none; cursor: pointer; font-weight: bold; }
+        #inputManual { width: 70%; padding: 10px; border-radius: 5px; border: none; margin-bottom: 10px; }
     </style>
 </head>
 <body>
 
-    <div class="header">PROMART - SISTEMA LPN</div>
+    <div class="header" id="titulo-pagina">PROMART MONITOR</div>
+    <div style="font-size: 11px; margin-bottom: 10px;"><span class="status-dot"></span>NUBE SINCRONIZADA</div>
 
-    <div id="seccion-carga">
-        <h3 style="margin-top:0">1. Subir Cruce de Excel</h3>
-        <input type="file" id="fileInput" accept=".xlsx, .xls, .csv">
-        <p style="font-size: 12px; color: #aaa;">Columnas: LPN, SKU, DESCRIPCION, OBS - QV</p>
+    <div id="seccion-admin">
+        <div class="card">
+            <h3>PANEL DE CARGA (ADMIN)</h3>
+            <p>Sube el Excel para actualizar a todo el equipo.</p>
+            <input type="file" id="fileInput" accept=".xlsx, .xls">
+            <div id="progreso" style="margin-top: 10px; color: #ff5000;"></div>
+        </div>
     </div>
 
-    <div id="seccion-trabajo">
-        
-        <div class="input-manual-container">
-            <input type="text" id="inputManual" placeholder="Escribir LPN manual...">
-            <button id="btnManual">BUSCAR</button>
-        </div>
-
+    <div id="seccion-operario">
+        <input type="text" id="inputManual" placeholder="LPN Manual...">
         <div id="reader"></div>
-        <div id="info-lpn">ESPERANDO LECTURA...</div>
         <div id="lista-productos"></div>
     </div>
 
-    <audio id="beepSound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" preload="auto"></audio>
+    <audio id="beep" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"></audio>
 
     <script>
-        let datosCruce = [];
-        const beep = document.getElementById('beepSound');
+        // 1. REEMPLAZA CON TUS DATOS DE FIREBASE
+        const firebaseConfig = {
+            apiKey: "AIzaSyD9Qe1lTPT0X38St8uGAQvbDHxKe_kLutU",
+            authDomain: "promart-lpn.firebaseapp.com",
+            projectId: "promart-lpn",
+            storageBucket: "promart-lpn.firebasestorage.app",
+            messagingSenderId: "1050885503301",
+            appId: "1:1050885503301:web:8ebb61651df1be7a09662c"
+        };
 
-        // Procesar Excel
-        document.getElementById('fileInput').addEventListener('change', function(e) {
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // 2. Lógica de Navegación
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('admin')) {
+            document.getElementById('seccion-admin').style.display = 'block';
+            document.getElementById('titulo-pagina').innerText = "PROMART ADMIN";
+        } else {
+            document.getElementById('seccion-operario').style.display = 'block';
+            iniciarCamara();
+        }
+
+        // 3. Admin: Cargar Excel a Firestore
+        document.getElementById('fileInput').addEventListener('change', async (e) => {
             const file = e.target.files[0];
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, {type: 'array'});
-                const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-                
-                datosCruce = rows.map(r => ({
+            const data = await file.arrayBuffer();
+            const workbook = XLSX.read(data);
+            const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+            
+            const total = rows.length;
+            document.getElementById('progreso').innerText = "Limpiando base de datos anterior...";
+
+            // Nota: Para este ejemplo borramos y subimos. 
+            // En Firestore es mejor usar un ID único para cada fila.
+            let i = 0;
+            for (const r of rows) {
+                await db.collection("cruce").doc(String(i)).set({
                     lpn: String(r['LPN'] || '').trim().toUpperCase(),
                     sku: String(r['SKU'] || ''),
                     desc: String(r['DESCRIPCION'] || ''),
                     obs: String(r['OBS - QV'] || '').trim().toUpperCase()
-                }));
-
-                if (datosCruce.length > 0) {
-                    document.getElementById('seccion-carga').style.display = 'none';
-                    document.getElementById('seccion-trabajo').style.display = 'block';
-                    iniciarCamara();
-                }
-            };
-            reader.readAsArrayBuffer(file);
+                });
+                i++;
+                document.getElementById('progreso').innerText = `Subiendo: ${Math.round((i/total)*100)}%`;
+            }
+            alert("¡Todo el equipo ahora tiene los nuevos datos!");
         });
 
-        // Función para procesar y mostrar la info
-        function procesarLPN(val) {
-            val = val.trim().toUpperCase();
-            if(!val) return;
+        // 4. Operario: Consultar y Escanear
+        function iniciarCamara() {
+            const scanner = new Html5Qrcode("reader");
+            scanner.start({ facingMode: "environment" }, { fps: 20, qrbox: {width: 250, height: 150} }, 
+            (text) => {
+                document.getElementById('beep').play();
+                buscarLPN(text.toUpperCase());
+            });
+        }
 
-            beep.play(); // Sonido
-            document.getElementById('info-lpn').innerText = "LPN: " + val;
+        async function buscarLPN(lpn) {
+            const snap = await db.collection("cruce").where("lpn", "==", lpn).get();
+            const box = document.getElementById('lista-productos');
+            box.innerHTML = `<h2 style="color:#ff5000">LPN: ${lpn}</h2>`;
             
-            const encontrados = datosCruce.filter(i => i.lpn === val);
-            const contenedor = document.getElementById('lista-productos');
-            contenedor.innerHTML = '';
-
-            if (encontrados.length > 0) {
-                encontrados.forEach(p => {
-                    const div = document.createElement('div');
-                    const obsLower = p.obs.toLowerCase();
-                    const claseCss = obsLower.includes('quiebre') ? 'quiebre' : 
-                                    obsLower.includes('subir') ? 'subir' : 'potencia';
-                    
-                    div.className = `producto ${claseCss}`;
-                    div.innerHTML = `
-                        <span class="status">${p.obs}</span>
-                        <div class="desc">${p.desc}</div>
-                        <div class="sku">SKU: ${p.sku}</div>
-                    `;
-                    contenedor.prepend(div); // Muestra el más reciente arriba
-                });
-            } else {
-                contenedor.innerHTML = '<h2 style="color:#ffeb3b">⚠️ NO ENCONTRADO</h2>';
+            if (snap.empty) {
+                box.innerHTML += '<h3 style="color:yellow">⚠️ NO ENCONTRADO EN LA NUBE</h3>';
+                return;
             }
+
+            snap.forEach(doc => {
+                const p = doc.data();
+                const clase = p.obs.includes('QUIEBRE') ? 'quiebre' : p.obs.includes('SUBIR') ? 'subir' : 'potencia';
+                box.innerHTML += `
+                    <div class="producto ${clase}">
+                        <span class="status-txt">${p.obs}</span>
+                        <div style="font-weight:bold">${p.desc}</div>
+                        <div class="sku-txt">SKU: ${p.sku}</div>
+                    </div>`;
+            });
         }
 
         // Búsqueda Manual
-        document.getElementById('btnManual').addEventListener('click', () => {
-            const txt = document.getElementById('inputManual').value;
-            procesarLPN(txt);
-            document.getElementById('inputManual').value = '';
+        document.getElementById('inputManual').addEventListener('change', (e) => {
+            buscarLPN(e.target.value.toUpperCase());
+            e.target.value = '';
         });
-
-        // Soporte para "Enter" en teclado manual
-        document.getElementById('inputManual').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                procesarLPN(e.target.value);
-                e.target.value = '';
-            }
-        });
-
-        function iniciarCamara() {
-            const html5QrCode = new Html5Qrcode("reader");
-            html5QrCode.start(
-                { facingMode: "environment" }, 
-                { fps: 20, qrbox: { width: 280, height: 160 } },
-                (text) => { procesarLPN(text); }
-            ).catch(err => alert("Error cámara: " + err));
-        }
     </script>
 </body>
 </html>
+
 
 
 
