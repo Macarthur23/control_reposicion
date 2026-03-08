@@ -10,20 +10,18 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; background: #121212; color: white; margin: 0; padding: 10px; }
+        body { font-family: 'Segoe UI', sans-serif; text-align: center; background: #121212; color: white; margin: 0; padding: 10px; }
         .header { background: #ff5000; padding: 15px; font-weight: bold; border-radius: 0 0 15px 15px; margin-bottom: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); font-size: 22px; }
         .status-bar { font-size: 11px; margin-bottom: 10px; color: #4CAF50; font-weight: bold; }
         
-        /* Contenedores */
         #seccion-admin, #seccion-operario { display: none; margin-top: 10px; }
         .card { background: #222; padding: 25px; border-radius: 15px; border: 1px solid #444; margin: 10px; }
         
-        /* Cámara y Resultados */
-        #reader { width: 100%; border-radius: 15px; overflow: hidden; background: #000; margin-top: 10px; }
+        #reader { width: 100%; border-radius: 15px; overflow: hidden; background: #000; margin-top: 10px; border: 2px solid #333; }
+        
         .producto { padding: 18px; margin: 12px 0; border-radius: 12px; text-align: left; animation: fadeIn 0.3s ease; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         
-        /* Colores por Acción */
         .quiebre { background: #d32f2f; border-left: 10px solid #ffeb3b; }
         .subir { background: #2e7d32; border-left: 10px solid #a5d6a7; }
         .potencia { background: #1565c0; border-left: 10px solid #90caf9; }
@@ -32,26 +30,23 @@
         .desc-txt { font-size: 16px; margin-bottom: 8px; line-height: 1.3; }
         .sku-txt { font-size: 13px; background: rgba(0,0,0,0.5); padding: 4px 8px; border-radius: 5px; display: inline-block; }
         
-        /* UI de Entrada */
         .input-group { margin-bottom: 15px; display: flex; gap: 5px; justify-content: center; }
-        #inputManual { width: 65%; padding: 12px; border-radius: 8px; border: none; font-size: 16px; outline: none; }
+        #inputManual { width: 65%; padding: 12px; border-radius: 8px; border: none; font-size: 16px; outline: none; background: #fff; color: #000; }
         .btn { padding: 12px 20px; background: #ff5000; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
         #progreso { margin-top: 15px; color: #ff5000; font-weight: bold; font-size: 14px; }
-        
-        input[type="file"] { color: #ccc; font-size: 14px; }
     </style>
 </head>
 <body>
 
     <div class="header" id="main-title">PROMART LPN</div>
-    <div class="status-bar">● CLOUD SYNC ACTIVE</div>
+    <div class="status-bar">● SISTEMA SINCRONIZADO</div>
 
     <div id="seccion-admin">
         <div class="card">
-            <h3>PANEL DE CONTROL</h3>
-            <p style="color: #aaa; font-size: 14px;">Carga el nuevo Excel para actualizar a todo el equipo.</p>
+            <h3>PANEL DE CARGA (BATCH)</h3>
+            <p style="color: #aaa; font-size: 14px;">Sube el Excel para actualizar a todo el equipo.</p>
             <input type="file" id="fileInput" accept=".xlsx, .xls">
-            <div id="progreso">Listo para cargar</div>
+            <div id="progreso">Esperando archivo...</div>
         </div>
     </div>
 
@@ -68,7 +63,7 @@
 
     <script>
         // ==========================================
-        // 1. CONFIGURACIÓN DE FIREBASE
+        // 1. CONFIGURACIÓN DE FIREBASE (RELLENA TUS DATOS)
         // ==========================================
         const firebaseConfig = {
             apiKey: "AIzaSyD9Qe1lTPT0X38St8uGAQvbDHxKe_kLutU",
@@ -81,6 +76,10 @@
 
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
+
+        // VARIABLES DE CONTROL (REGULADOR)
+        let ultimoCodigoLeido = "";
+        let tiempoUltimaLectura = 0;
 
         // ==========================================
         // 2. CONTROL DE VISTAS
@@ -95,23 +94,19 @@
         }
 
         // ==========================================
-        // 3. LÓGICA ADMIN: SUBIDA MASIVA (BATCHES)
+        // 3. ADMIN: SUBIDA MASIVA (BATCH)
         // ==========================================
         document.getElementById('fileInput').addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
-
             const progresoDiv = document.getElementById('progreso');
-            progresoDiv.innerText = "Leyendo archivo...";
-
+            progresoDiv.innerText = "Procesando...";
+            
             const data = await file.arrayBuffer();
             const workbook = XLSX.read(data);
             const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-            
             const total = rows.length;
-            progresoDiv.innerText = `Preparando ${total} filas...`;
 
-            // Dividir en grupos de 500 (límite de Firebase)
             const chunk = (arr, size) => Array.from({ length: Math.ceil(arr.length / size) }, (v, i) => arr.slice(i * size, i * size + size));
             const grupos = chunk(rows, 500);
 
@@ -119,58 +114,67 @@
                 let procesados = 0;
                 for (const grupo of grupos) {
                     const batch = db.batch();
-                    
                     grupo.forEach((r) => {
-                        // Creamos un ID único combinando LPN, SKU y el índice
-                        const docId = `item_${procesados}`;
+                        const docId = item_${procesados};
                         const docRef = db.collection("cruce").doc(docId);
-                        
                         batch.set(docRef, {
                             lpn: String(r['LPN'] || '').trim().toUpperCase(),
                             sku: String(r['SKU'] || ''),
                             desc: String(r['DESCRIPCION'] || ''),
-                            obs: String(r['OBS - QV'] || '').trim().toUpperCase(),
-                            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                            obs: String(r['OBS - QV'] || '').trim().toUpperCase()
                         });
                         procesados++;
                     });
-
-                    await batch.commit(); // Sube 500 de golpe
-                    progresoDiv.innerText = `Subiendo datos: ${Math.round((procesados / total) * 100)}%`;
+                    await batch.commit();
+                    progresoDiv.innerText = Subiendo: ${Math.round((procesados / total) * 100)}%;
                 }
-                
-                progresoDiv.innerHTML = "<span style='color:#4CAF50'>✅ ¡ACTUALIZACIÓN EXITOSA!</span>";
-                alert("¡El equipo ya puede ver los nuevos datos!");
+                progresoDiv.innerHTML = "<span style='color:#4CAF50'>✅ ¡DATOS ACTUALIZADOS!</span>";
             } catch (error) {
-                console.error(error);
-                progresoDiv.innerText = "❌ Error al subir a la nube.";
+                progresoDiv.innerText = "❌ Error en la nube";
             }
         });
 
         // ==========================================
-        // 4. LÓGICA OPERARIO: CONSULTA
+        // 4. OPERARIO: ESCANEO MODERADO
         // ==========================================
         function iniciarEscanner() {
             const scanner = new Html5Qrcode("reader");
-            const config = { fps: 20, qrbox: { width: 280, height: 160 } };
+            const config = { 
+                fps: 10, // Bajamos FPS para menor consumo
+                qrbox: { width: 280, height: 160 } 
+            };
 
             scanner.start({ facingMode: "environment" }, config, (decodedText) => {
-                document.getElementById('beep').play();
-                buscarEnNube(decodedText.toUpperCase());
-            }).catch(err => console.error("Error cámara:", err));
+                const ahora = Date.now();
+                const textoLimpio = decodedText.trim().toUpperCase();
+
+                // FILTRO: Solo si es distinto LPN o han pasado 3 seg
+                if (textoLimpio !== ultimoCodigoLeido || (ahora - tiempoUltimaLectura) > 3000) {
+                    ultimoCodigoLeido = textoLimpio;
+                    tiempoUltimaLectura = ahora;
+                    
+                    document.getElementById('beep').play();
+                    buscarEnNube(textoLimpio);
+                }
+            }).catch(err => console.error(err));
         }
 
         async function buscarEnNube(lpnValue) {
             const contenedor = document.getElementById('lista-productos');
-            contenedor.innerHTML = `<h2 style="color:#ff5000">LPN: ${lpnValue}</h2>`;
             
+            // LIMPIAR ANTERIOR
+            contenedor.innerHTML = ""; 
+
             try {
-                const snapshot = await db.collection("cruce").where("lpn", "==", lpnValue.trim()).get();
+                const snapshot = await db.collection("cruce").where("lpn", "==", lpnValue).get();
                 
                 if (snapshot.empty) {
-                    contenedor.innerHTML += '<h3 style="color:#ffeb3b">⚠️ LPN NO ENCONTRADO</h3>';
+                    contenedor.innerHTML = <h2 style="color:#ff5000">LPN: ${lpnValue}</h2>;
+                    contenedor.innerHTML += '<h3 style="color:#ffeb3b">⚠️ NO ENCONTRADO EN SISTEMA</h3>';
                     return;
                 }
+
+                let htmlContent = <h2 style="color:#ff5000">LPN ACTUAL: ${lpnValue}</h2>;
 
                 snapshot.forEach(doc => {
                     const p = doc.data();
@@ -178,38 +182,37 @@
                     const claseCss = obs.includes('QUIEBRE') ? 'quiebre' : 
                                     obs.includes('SUBIR') ? 'subir' : 'potencia';
                     
-                    contenedor.innerHTML += `
+                    htmlContent += `
                         <div class="producto ${claseCss}">
                             <span class="status-txt">${obs}</span>
                             <div class="desc-txt">${p.desc}</div>
                             <div class="sku-txt">SKU: ${p.sku}</div>
                         </div>`;
                 });
+
+                contenedor.innerHTML = htmlContent;
+
             } catch (error) {
-                contenedor.innerHTML += '<p style="color:red">Error de conexión</p>';
+                contenedor.innerHTML = '<p style="color:red">Error de red: Verifica tus datos</p>';
             }
         }
 
-        // Búsqueda Manual
-        const inputM = document.getElementById('inputManual');
-        const btnM = document.getElementById('btnManual');
+        // BÚSQUEDA MANUAL
+        const btnManual = document.getElementById('btnManual');
+        const inputManual = document.getElementById('inputManual');
 
-        const realizarBusquedaManual = () => {
-            if (inputM.value.trim() !== "") {
-                buscarEnNube(inputM.value.toUpperCase());
-                inputM.value = "";
+        const manualSearch = () => {
+            const val = inputManual.value.trim().toUpperCase();
+            if (val) {
+                ultimoCodigoLeido = val; // Seteamos para que el regulador sepa
+                buscarEnNube(val);
+                inputManual.value = "";
             }
         };
 
-        btnM.addEventListener('click', realizarBusquedaManual);
-        inputM.addEventListener('keypress', (e) => { if (e.key === 'Enter') realizarBusquedaManual(); });
+        btnManual.addEventListener('click', manualSearch);
+        inputManual.addEventListener('keypress', (e) => { if (e.key === 'Enter') manualSearch(); });
 
     </script>
 </body>
 </html>
-
-
-
-
-
-
