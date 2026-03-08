@@ -3,62 +3,123 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PROMART - Lector LPN</title>
+    <title>PROMART - Lector Dinámico</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         body { font-family: sans-serif; text-align: center; background-color: #1a1a1a; color: white; margin: 0; padding: 10px; }
-        .header { background-color: #ff5000; padding: 15px; font-weight: bold; font-size: 20px; border-radius: 0 0 15px 15px; margin-bottom: 15px; }
+        .header { background-color: #ff5000; padding: 15px; font-weight: bold; font-size: 20px; border-radius: 0 0 15px 15px; margin-bottom: 20px; }
         
-        #reader { width: 100%; border-radius: 15px; overflow: hidden; margin-bottom: 10px; background: #333; }
+        /* Paso 1: Carga de archivo */
+        #seccion-carga { background: #333; padding: 20px; border-radius: 15px; border: 2px dashed #ff5000; margin-bottom: 20px; }
+        input[type="file"] { margin: 15px 0; color: white; }
         
+        /* Paso 2: Cámara (Oculta al inicio) */
+        #seccion-camara { display: none; }
+        #reader { width: 100%; border-radius: 15px; overflow: hidden; background: #000; }
+        
+        /* Resultados */
         .producto { padding: 15px; margin: 10px 0; border-radius: 12px; text-align: left; }
         .quiebre { background-color: #d32f2f; border-left: 10px solid #ffeb3b; }
         .subir { background-color: #2e7d32; border-left: 10px solid #a5d6a7; }
         .potencia { background-color: #1565c0; border-left: 10px solid #90caf9; }
         
-        .status { font-size: 24px; font-weight: bold; display: block; margin-bottom: 5px; }
-        .desc { font-size: 16px; font-weight: bold; }
-        .sku { font-size: 14px; opacity: 0.8; background: rgba(0,0,0,0.3); padding: 2px 5px; border-radius: 4px; }
-        #resultado-lpn { color: #ff5000; font-size: 14px; margin-bottom: 10px; }
+        .status { font-size: 24px; font-weight: bold; display: block; }
+        .desc { font-size: 16px; margin: 5px 0; }
+        .sku { font-size: 13px; background: rgba(0,0,0,0.3); padding: 3px; border-radius: 4px; }
+        #info-lpn { color: #ff5000; font-weight: bold; margin: 15px 0; font-size: 18px; }
     </style>
 </head>
 <body>
 
-    <div class="header">PROMART - MONITOR LPN</div>
+    <div class="header">PROMART - CARGA DE CRUCE</div>
 
-    <div id="reader"></div>
-    <div id="resultado-lpn">ESPERANDO ESCANEO...</div>
-    <div id="lista-productos"></div>
+    <div id="seccion-carga">
+        <h3>1. Selecciona el Excel del Cruce</h3>
+        <input type="file" id="fileInput" accept=".xlsx, .xls, .csv">
+        <p style="font-size: 12px; color: #ccc;">El archivo debe tener las columnas: LPN, SKU, DESCRIPCION y OBS - QV</p>
+    </div>
+
+    <div id="seccion-camara">
+        <div id="info-lpn">LPN ACTUAL: NINGUNO</div>
+        <div id="reader"></div>
+        <div id="lista-productos"></div>
+    </div>
 
     <script>
-        // DATOS DE TU EXCEL (Ya inyectados)
-        const inventario = [
-            {"lpn": "TLPN4040312848", "sku": "152393", "desc": "FOCO UFO ORANGE E27 34WLUZ FRIA", "obs": "SUBIR"},
-            {"lpn": "TLPN4040312849", "sku": "152393", "desc": "FOCO UFO ORANGE E27 34WLUZ FRIA", "obs": "SUBIR"},
-            {"lpn": "TLPN4040318092", "sku": "132463", "desc": "5pz-XLIG-FOCO LED PACK X5 E27 15W LUZ BLANCA ORANGE", "obs": "SUBIR"},
-            {"lpn": "TLPN4040318092", "sku": "126267", "desc": "1pz-XLIG-PACK X 3 BULBO LED E27 15W LF ORANGE", "obs": "SUBIR"},
-            {"lpn": "TLPN4040318092", "sku": "132464", "desc": "5pz-XLIG-FOCO LED PACK X5 E27 7W LUZ BLANCA ORANGE", "obs": "SUBIR"},
-            {"lpn": "B5617613840", "sku": "131545", "desc": "XPE-LIMPIAVIDRIOS SAPOLIO 5 LT", "obs": "QUIEBRE"},
-            {"lpn": "B5617683366", "sku": "137756", "desc": "XSS-SIERRA CIRCULAR 1/4 DCS570B", "obs": "POTENCIA"}
-            // Aquí puedes seguir pegando más filas del Excel...
-        ];
+        let datosCruce = [];
 
-        function onScanSuccess(decodedText) {
-            // Audio de confirmación
-            const audio = new Audio('https://www.soundjay.com/buttons/beep-07.mp3');
-            audio.play();
+        // Lógica para procesar el Excel
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            const reader = new FileReader();
 
-            document.getElementById('resultado-lpn').innerText = "LPN ESCANEADO: " + decodedText;
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                
+                // Convertir a JSON
+                const rows = XLSX.utils.sheet_to_json(firstSheet);
+                
+                // Limpiar y validar datos
+                datosCruce = rows.map(r => ({
+                    lpn: String(r['LPN'] || '').trim().toUpperCase(),
+                    sku: String(r['SKU'] || ''),
+                    desc: String(r['DESCRIPCION'] || ''),
+                    obs: String(r['OBS - QV'] || '').trim().toUpperCase()
+                }));
+
+                if (datosCruce.length > 0) {
+                    alert("¡Éxito! Se cargaron " + datosCruce.length + " registros.");
+                    iniciarEscaner();
+                } else {
+                    alert("Error: No se encontraron datos en el archivo.");
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        function iniciarEscaner() {
+            // Mostrar cámara y ocultar carga
+            document.getElementById('seccion-carga').style.display = 'none';
+            document.getElementById('seccion-camara').style.display = 'block';
+            document.querySelector('.header').innerText = "MONITOR DE ESCANEO";
+
+            const html5QrCode = new Html5Qrcode("reader");
+            const config = { 
+                fps: 15, 
+                qrbox: { width: 280, height: 160 },
+                aspectRatio: 1.0 
+            };
+
+            html5QrCode.start(
+                { facingMode: "environment" }, 
+                config, 
+                (decodedText) => {
+                    const audio = new Audio('https://www.soundjay.com/buttons/beep-07.mp3');
+                    audio.play();
+                    mostrarResultado(decodedText);
+                }
+            );
+        }
+
+        function mostrarResultado(lpnEscaneado) {
+            const val = lpnEscaneado.trim().toUpperCase();
+            document.getElementById('info-lpn').innerText = "LPN ESCANEADO: " + val;
             
-            // Buscar productos
-            const encontrados = inventario.filter(i => i.lpn.trim().toUpperCase() === decodedText.trim().toUpperCase());
+            const encontrados = datosCruce.filter(i => i.lpn === val);
             const contenedor = document.getElementById('lista-productos');
             contenedor.innerHTML = '';
 
             if (encontrados.length > 0) {
                 encontrados.forEach(p => {
                     const div = document.createElement('div');
-                    div.className = `producto ${p.obs.toLowerCase()}`;
+                    // Asignar clase de color (quiebre, subir, potencia)
+                    const claseCss = p.obs.toLowerCase().includes('quiebre') ? 'quiebre' : 
+                                    p.obs.toLowerCase().includes('subir') ? 'subir' : 'potencia';
+                    
+                    div.className = `producto ${claseCss}`;
                     div.innerHTML = `
                         <span class="status">${p.obs}</span>
                         <div class="desc">${p.desc}</div>
@@ -67,18 +128,11 @@
                     contenedor.appendChild(div);
                 });
             } else {
-                contenedor.innerHTML = '<h2 style="color:yellow">⚠️ NO ENCONTRADO</h2>';
+                contenedor.innerHTML = '<h2 style="color:yellow">⚠️ LPN NO ENCONTRADO</h2>';
             }
         }
-
-        // Configurar el escáner
-        const html5QrCode = new Html5Qrcode("reader");
-        const config = { fps: 10, qrbox: { width: 250, height: 150 } };
-
-        // Iniciar cámara trasera automáticamente
-        html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess);
-
     </script>
 </body>
 </html>
+
 
