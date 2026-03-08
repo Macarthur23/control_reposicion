@@ -3,62 +3,82 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PROMART - Monitor LPN</title>
+    <title>PROMART - Lector LPN</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
-        body { font-family: 'Arial', sans-serif; text-align: center; padding: 20px; background-color: #f4f4f9; }
-        #scanner { width: 90%; padding: 20px; font-size: 22px; border-radius: 10px; border: 2px solid #0056b3; outline: none; }
+        body { font-family: sans-serif; text-align: center; background-color: #1a1a1a; color: white; margin: 0; padding: 10px; }
+        .header { background-color: #ff5000; padding: 15px; font-weight: bold; font-size: 20px; border-radius: 0 0 15px 15px; margin-bottom: 15px; }
         
-        #card { display: none; margin-top: 20px; padding: 30px; border-radius: 20px; color: white; shadow: 0 4px 8px rgba(0,0,0,0.2); }
+        #reader { width: 100%; border-radius: 15px; overflow: hidden; margin-bottom: 10px; background: #333; }
         
-        /* Colores por Acción */
-        .quiebre { background-color: #d32f2f; } /* Rojo */
-        .subir { background-color: #388e3c; }   /* Verde */
-        .potencia { background-color: #1976d2; } /* Azul */
+        .producto { padding: 15px; margin: 10px 0; border-radius: 12px; text-align: left; }
+        .quiebre { background-color: #d32f2f; border-left: 10px solid #ffeb3b; }
+        .subir { background-color: #2e7d32; border-left: 10px solid #a5d6a7; }
+        .potencia { background-color: #1565c0; border-left: 10px solid #90caf9; }
         
-        h1 { color: #333; }
-        .info-principal { font-size: 40px; font-weight: bold; margin: 10px 0; }
-        .info-secundaria { font-size: 20px; opacity: 0.9; }
+        .status { font-size: 24px; font-weight: bold; display: block; margin-bottom: 5px; }
+        .desc { font-size: 16px; font-weight: bold; }
+        .sku { font-size: 14px; opacity: 0.8; background: rgba(0,0,0,0.3); padding: 2px 5px; border-radius: 4px; }
+        #resultado-lpn { color: #ff5000; font-size: 14px; margin-bottom: 10px; }
     </style>
 </head>
 <body>
-    <h1>Lector de LPN</h1>
-    <input type="text" id="scanner" placeholder="Pistolee aquí..." autofocus>
 
-    <div id="card">
-        <div id="accion" class="info-principal"></div>
-        <div id="desc" class="info-secundaria"></div>
-        <div id="sku" style="font-weight: bold; margin-top: 10px;"></div>
-    </div>
+    <div class="header">PROMART - MONITOR LPN</div>
+
+    <div id="reader"></div>
+    <div id="resultado-lpn">ESPERANDO ESCANEO...</div>
+    <div id="lista-productos"></div>
 
     <script>
-        const input = document.getElementById('scanner');
-        const card = document.getElementById('card');
-        let inventario = [];
+        // DATOS DE TU EXCEL (Ya inyectados)
+        const inventario = [
+            {"lpn": "TLPN4040312848", "sku": "152393", "desc": "FOCO UFO ORANGE E27 34WLUZ FRIA", "obs": "SUBIR"},
+            {"lpn": "TLPN4040312849", "sku": "152393", "desc": "FOCO UFO ORANGE E27 34WLUZ FRIA", "obs": "SUBIR"},
+            {"lpn": "TLPN4040318092", "sku": "132463", "desc": "5pz-XLIG-FOCO LED PACK X5 E27 15W LUZ BLANCA ORANGE", "obs": "SUBIR"},
+            {"lpn": "TLPN4040318092", "sku": "126267", "desc": "1pz-XLIG-PACK X 3 BULBO LED E27 15W LF ORANGE", "obs": "SUBIR"},
+            {"lpn": "TLPN4040318092", "sku": "132464", "desc": "5pz-XLIG-FOCO LED PACK X5 E27 7W LUZ BLANCA ORANGE", "obs": "SUBIR"},
+            {"lpn": "B5617613840", "sku": "131545", "desc": "XPE-LIMPIAVIDRIOS SAPOLIO 5 LT", "obs": "QUIEBRE"},
+            {"lpn": "B5617683366", "sku": "137756", "desc": "XSS-SIERRA CIRCULAR 1/4 DCS570B", "obs": "POTENCIA"}
+            // Aquí puedes seguir pegando más filas del Excel...
+        ];
 
-        // Cargar el JSON desde GitHub
-        fetch('datos.json')
-            .then(res => res.json())
-            .then(data => { inventario = data; });
+        function onScanSuccess(decodedText) {
+            // Audio de confirmación
+            const audio = new Audio('https://www.soundjay.com/buttons/beep-07.mp3');
+            audio.play();
 
-        input.addEventListener('change', (e) => {
-            const lpnValue = e.target.value.trim();
-            const p = inventario.find(i => String(i.lpn) === lpnValue);
+            document.getElementById('resultado-lpn').innerText = "LPN ESCANEADO: " + decodedText;
+            
+            // Buscar productos
+            const encontrados = inventario.filter(i => i.lpn.trim().toUpperCase() === decodedText.trim().toUpperCase());
+            const contenedor = document.getElementById('lista-productos');
+            contenedor.innerHTML = '';
 
-            if (p) {
-                card.style.display = 'block';
-                document.getElementById('accion').innerText = p.accion;
-                document.getElementById('desc').innerText = p.descripcion;
-                document.getElementById('sku').innerText = "SKU: " + p.sku;
-                
-                // Aplicar color según OBS - QV
-                card.className = p.accion.toLowerCase(); 
+            if (encontrados.length > 0) {
+                encontrados.forEach(p => {
+                    const div = document.createElement('div');
+                    div.className = `producto ${p.obs.toLowerCase()}`;
+                    div.innerHTML = `
+                        <span class="status">${p.obs}</span>
+                        <div class="desc">${p.desc}</div>
+                        <div class="sku">SKU: ${p.sku}</div>
+                    `;
+                    contenedor.appendChild(div);
+                });
             } else {
-                alert("LPN no encontrado");
-                card.style.display = 'none';
+                contenedor.innerHTML = '<h2 style="color:yellow">⚠️ NO ENCONTRADO</h2>';
             }
-            e.target.value = ''; // Limpiar para el siguiente
-            input.focus();
-        });
+        }
+
+        // Configurar el escáner
+        const html5QrCode = new Html5Qrcode("reader");
+        const config = { fps: 10, qrbox: { width: 250, height: 150 } };
+
+        // Iniciar cámara trasera automáticamente
+        html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess);
+
     </script>
 </body>
 </html>
+
