@@ -78,7 +78,7 @@
             iniciarCamara();
         }
 
-        // 3. Admin: Cargar Excel a Firestore
+        // 3. Admin: Cargar Excel a Firestore (VERSIÓN ULTRA RÁPIDA)
         document.getElementById('fileInput').addEventListener('change', async (e) => {
             const file = e.target.files[0];
             const data = await file.arrayBuffer();
@@ -86,22 +86,43 @@
             const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
             
             const total = rows.length;
-            document.getElementById('progreso').innerText = "Limpiando base de datos anterior...";
+            const progresoDiv = document.getElementById('progreso');
+            progresoDiv.innerText = "Iniciando subida masiva...";
 
-            // Nota: Para este ejemplo borramos y subimos. 
-            // En Firestore es mejor usar un ID único para cada fila.
-            let i = 0;
-            for (const r of rows) {
-                await db.collection("cruce").doc(String(i)).set({
-                    lpn: String(r['LPN'] || '').trim().toUpperCase(),
-                    sku: String(r['SKU'] || ''),
-                    desc: String(r['DESCRIPCION'] || ''),
-                    obs: String(r['OBS - QV'] || '').trim().toUpperCase()
-                });
-                i++;
-                document.getElementById('progreso').innerText = `Subiendo: ${Math.round((i/total)*100)}%`;
+            // Función para dividir las filas en grupos de 500 (límite de Firebase)
+            const chunk = (arr, size) => Array.from({ length: Math.ceil(arr.length / size) }, (v, i) => arr.slice(i * size, i * size + size));
+            const grupos = chunk(rows, 500);
+
+            try {
+                let procesados = 0;
+                for (const grupo de grupos) {
+                    const batch = db.batch(); // Creamos un lote
+                    
+                    grupo.forEach((r) => {
+                        // Usamos una combinación de LPN y SKU como ID para evitar duplicados exactos
+                        const idUnico = `${r['LPN']}_${r['SKU']}_${procesados}`;
+                        const docRef = db.collection("cruce").doc(idUnico);
+                        
+                        batch.set(docRef, {
+                            lpn: String(r['LPN'] || '').trim().toUpperCase(),
+                            sku: String(r['SKU'] || ''),
+                            desc: String(r['DESCRIPCION'] || ''),
+                            obs: String(r['OBS - QV'] || '').trim().toUpperCase(),
+                            fecha: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        procesados++;
+                    });
+
+                    await batch.commit(); // Se suben 500 de golpe
+                    progresoDiv.innerText = `Progreso: ${Math.round((procesados / total) * 100)}%`;
+                }
+                
+                progresoDiv.innerHTML = "<b style='color:#4CAF50'>✅ ¡SUBIDA COMPLETADA CON ÉXITO!</b>";
+                alert("¡Base de datos actualizada!");
+            } catch (error) {
+                console.error("Error al subir:", error);
+                progresoDiv.innerText = "❌ Error en la subida.";
             }
-            alert("¡Todo el equipo ahora tiene los nuevos datos!");
         });
 
         // 4. Operario: Consultar y Escanear
@@ -144,6 +165,7 @@
     </script>
 </body>
 </html>
+
 
 
 
